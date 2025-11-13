@@ -27,7 +27,7 @@
 
 ```bash
 # Клонируем репозиторий
-git clone https://github.com/твой-ник/reviewer-service.git
+git clone https://github.com/Skorpsrgvch/reviewer-service.git
 cd reviewer-service
 
 # Запускаем сервис
