@@ -18,13 +18,6 @@
 
 ## 🚀 Как запустить
 
-### Предварительные требования
-
-- Docker и Docker Compose
-- PowerShell или bash (для тестов)
-
-### Запуск сервиса
-
 ```bash
 # Клонируем репозиторий
 git clone https://github.com/Skorpsrgvch/reviewer-service.git
@@ -33,75 +26,294 @@ cd reviewer-service
 # Запускаем сервис
 docker-compose up --build -d
 
-# Проверяем, что всё работает
-curl http://localhost:8080/stats
-# Должен вернуть: {"assignments":{}}
 ```
+---
+
+## 🏗️ Архитектура
+
+Проект построен по принципам чистой архитектуры (Clean Architecture), что обеспечивает слабую связанность, тестируемость и гибкость при изменении бизнес-логики или инфраструктуры.
+
+Структура разделена на три основных слоя:
+
+- domain/ — содержит чистые бизнес-сущности (PullRequest, User, Team) и ошибки. Никаких зависимостей от внешнего мира.
+- usecase/ — реализует бизнес-логику (юзкейсы): создание PR, переназначение ревьюера, управление командами. Работает только с интерфейсами из domain.
+- adapter/ — адаптирует внешние системы: HTTP-обработчики (http/) и репозитории (postgres/). Реализуют интерфейсы из usecase.
+Такой подход позволяет:
+- Изолировать бизнес-логику от инфраструктуры.
+- Легко писать unit-тесты, подменяя зависимости.
+- Менять базу данных или фреймворк без переписывания бизнес-логики.
+
 ---
 
 ## 📜 API Эндпоинты
 
-**Создать команду**:
+Примеры для **Postman**
 
-POST /team/add
+**Добавить команду**:
+
+```bash
+POST http://localhost:8080/team/add
+```
+В **Headers**:
+[{"key":"Authorization","value":"Bearer admin"}}]
+
+**Тело запроса (Body)**:
+```bash
+{
+  "team_name": "backend5",
+  "members": [
+    { "user_id": "v1", "username": "author", "is_active": true },
+    { "user_id": "v2", "username": "reviewer1", "is_active": true },
+    { "user_id": "v3", "username": "reviewer2", "is_active": true },
+    { "user_id": "v4", "username": "reviewer3", "is_active": true },
+    { "user_id": "v5", "username": "reviewer4", "is_active": false }
+  ]
+}
+```
+
+**Пример ответа**:
+```bash
+{
+    "team": {
+        "team_name": "backend5",
+        "members": [
+            {
+                "user_id": "v1",
+                "username": "author",
+                "is_active": true
+            },
+            {
+                "user_id": "v2",
+                "username": "reviewer1",
+                "is_active": true
+            },
+            {
+                "user_id": "v3",
+                "username": "reviewer2",
+                "is_active": true
+            },
+            {
+                "user_id": "v4",
+                "username": "reviewer3",
+                "is_active": true
+            },
+            {
+                "user_id": "v5",
+                "username": "reviewer4",
+                "is_active": false
+            }
+        ]
+    }
+}
+```
 
 **Получить команду**:
 
-GET /team/get?team_name=...
+```bash
+GET http://localhost:8080/team/get?team_name=backend5
+```
 
-**Изменить активность пользователя**:
+**Пример ответа**:
+```bash
+{
+    "team": {
+        "team_name": "backend5",
+        "members": [
+            {
+                "user_id": "v1",
+                "username": "author",
+                "is_active": true
+            },
+            {
+                "user_id": "v2",
+                "username": "reviewer1",
+                "is_active": true
+            },
+            {
+                "user_id": "v3",
+                "username": "reviewer2",
+                "is_active": true
+            },
+            {
+                "user_id": "v4",
+                "username": "reviewer3",
+                "is_active": true
+            },
+            {
+                "user_id": "v5",
+                "username": "reviewer4",
+                "is_active": false
+            }
+        ]
+    }
+}
+```
 
-POST /users/setIsActive
+**Создать PR**:
 
-**Получить PR, назначенные пользователю**:
+```bash
+POST http://localhost:8080/pullRequest/create
+```
+В **Headers**:
+[{"key":"Authorization","value":"Bearer admin"}}]
 
-GET /users/getReview?user_id=...
+**Тело запроса (Body)**:
+```bash
+{
+  "pull_request_id": "pr-1",
+  "pull_request_name": "Fix bug",
+  "author_id": "v2"
+}
+```
 
-**Создать PR (автоматически назначает ревьюеров)**:
+**Пример ответа**:
+```bash
+{
+    "pr": {
+        "pull_request_id": "pr-1",
+        "pull_request_name": "Fix bug",
+        "author_id": "v2",
+        "status": "OPEN",
+        "assigned_reviewers": [
+            "v1",
+            "v4"
+        ],
+        "created_at": "2025-11-15T18:29:11Z"
+    }
+}
+```
 
-POST /pullRequest/create
+**Переназначить PR**:
+
+```bash
+POST http://localhost:8080/pullRequest/reassign
+```
+В **Headers**:
+[{"key":"Authorization","value":"Bearer admin"}}]
+
+**Тело запроса (Body)**:
+```bash
+{
+  "pull_request_id": "pr-1",
+  "old_reviewer_id": "v4"
+}
+```
+
+**Пример ответа**:
+```bash
+{
+    "pr": {
+        "pull_request_id": "pr-1",
+        "pull_request_name": "Fix bug",
+        "author_id": "v2",
+        "status": "OPEN",
+        "assigned_reviewers": [
+            "v1",
+            "v3"
+        ],
+        "created_at": "2025-11-15T18:29:11Z"
+    },
+    "replaced_by": "v3"
+}
+```
 
 **Слить PR (после merge — изменения запрещены)**:
 
-POST /pullRequest/merge
+```bash
+POST http://localhost:8080/pullRequest/merge
+```
+В **Headers**:
+[{"key":"Authorization","value":"Bearer admin"}}]
 
-**Переназначить одного ревьюера**:
+**Тело запроса (Body)**:
+```bash
+{
+  "pull_request_id": "pr-1"
+}
+```
 
-POST /pullRequest/reassign
+**Пример ответа**:
+```bash
+{
+    "pr": {
+        "pull_request_id": "pr-1",
+        "pull_request_name": "Fix bug",
+        "author_id": "v2",
+        "status": "MERGED",
+        "assigned_reviewers": [
+            "v1",
+            "v3"
+        ],
+        "created_at": "2025-11-15T18:29:11Z",
+        "mergedAt": "2025-11-15T18:37:36Z"
+    }
+}
+```
+
+**Изменить активность пользователя**:
+
+```bash
+POST http://localhost:8080/users/setIsActive
+```
+В **Headers**:
+[{"key":"Authorization","value":"Bearer admin"}}]
+
+**Тело запроса (Body)**:
+```bash
+{
+  "user_id": "v5",
+  "is_active": true
+}
+```
+
+**Пример ответа**:
+```bash
+{
+    "user": {
+        "user_id": "v5",
+        "username": "reviewer4",
+        "is_active": true,
+        "team_name": "backend5"
+    }
+}
+```
+
+**Получить PR, назначенные пользователю**:
+
+```bash
+GET http://localhost:8080/users/getReview?user_id=v1
+```
+
+**Пример ответа**:
+```bash
+{
+    "user_id": "v1",
+    "pull_requests": [
+        {
+            "pull_request_id": "pr-1",
+            "pull_request_name": "Fix bug",
+            "author_id": "v2",
+            "status": "OPEN"
+        }
+    ]
+}
+```
 
 **Получить статистику по назначениям**:
 
-GET /stats
-
----
-
-## 📁 Структура проекта
-
 ```bash
-cmd/
-├── reviewer-service/
-│   └── main.go           # Точка входа
-internal/
-├── handler/              # Обработчики HTTP
-├── model/                # Структуры данных
-├── repository/postgres/  # Работа с БД
-├── service/              # Логика бизнес-процессов
-migrations/               # SQL-миграции
-pkg/db/                   # Подключение к БД
-docker-compose.yml        # Настройка контейнеров
-Dockerfile                # Сборка образа
-load-test.ps1             # Скрипт нагрузочного тестирования
-README.md                 # Этот файл
+GET http://localhost:8080/stats
 ```
----
 
-## 🛡️ Безопасность и надёжность
-
-- Все операции с базой данных выполняются в рамках одного контекста.
-- Используется graceful shutdown.
-- Проверка существования объектов перед операциями.
-- Идемпотентность merge.
-
+**Пример ответа**:
+```bash
+{
+    "assignments": {
+        "v1": 1,
+        "v3": 1
+    }
+}
+```
 ---
 
 # Дополнительные задания
@@ -118,7 +330,6 @@ README.md                 # Этот файл
 **Примеры работы**
 
 **После создания одного Pull Request’а**
-Ответ пустой — нет активных назначений:
 
 <img width="593" height="249" alt="image" src="https://github.com/user-attachments/assets/a627eb72-17c9-42dd-be0d-08c8df31c855" />
 
