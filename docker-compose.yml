@@ -31,5 +31,5 @@ services:
         echo 'Running migrations...' &&
         migrate -path /root/migrations -database $$DB_URL up &&
         echo 'Starting app...' &&
-        ./reviewer-service
+        ./server
       "
