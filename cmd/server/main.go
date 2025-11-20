@@ -68,18 +68,16 @@ func main() {
 		dbURL = "postgres://user:password@db:5432/avito?sslmode=disable"
 	}
 
-	// Ждём готовности БД
-	if err := waitForDB(dbURL); err != nil {
-		log.Fatalf("Failed to connect to DB: %v", err)
-	}
-
 	// Запускаем миграции
 	if err := runMigrations(dbURL); err != nil {
 		log.Fatalf("Migrations failed: %v", err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	// Подключаемся к БД
-	dbConn, err := db.NewPostgresDB(context.Background(), dbURL)
+	dbConn, err := db.NewPostgresDB(ctx, dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
@@ -177,28 +175,12 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 	log.Println("Server exited gracefully")
-}
-
-// waitForDB — ожидание подключения к БД
-func waitForDB(dbURL string) error {
-	for i := 0; i < 30; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		dbConn, err := db.NewPostgresDB(ctx, dbURL)
-		cancel()
-		if err != nil {
-			log.Printf("Waiting for DB... attempt %d", i+1)
-			time.Sleep(2 * time.Second)
-			continue
-		}
-		dbConn.Close()
-		return nil
-	}
-	return fmt.Errorf("timeout waiting for database")
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/Skorpsrgvch/reviewer-service/internal/domain"
 )
 
-// Реализует интерфейс из usecase (будет объявлен позже)
+// Реализует интерфейс из usecase
 type UserRepo struct {
 	db *sql.DB
 }
